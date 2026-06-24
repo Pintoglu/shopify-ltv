@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Customer LTV Lookup</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  min-height: 100vh;
+}
+
+header {
+  background: #fff;
+  border-bottom: 1px solid #d2d2d7;
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+}
+header h1 { font-size: 18px; font-weight: 600; }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 1px solid #d2d2d7;
+  padding: 0 32px;
+}
+.tab-btn {
+  padding: 12px 22px;
+  font-size: 14px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  color: #6e6e73;
+  margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+.tab-btn.active { color: #0071e3; border-bottom-color: #0071e3; }
+.tab-btn:hover:not(.active) { color: #1d1d1f; }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.main { padding: 28px 32px; max-width: 1500px; margin: 0 auto; }
+
+/* Upload grid */
+.upload-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.upload-card {
+  background: #fff;
+  border: 2px dashed #d2d2d7;
+  border-radius: 12px;
+  padding: 24px;
+  transition: border-color .15s, background .15s;
+}
+.upload-card.drag-over { border-color: #0071e3; background: #f0f7ff; }
+.upload-card.has-files { border-style: solid; border-color: #34c759; background: #f0fdf4; }
+
+.upload-card label { display: block; cursor: pointer; }
+.upload-card input[type="file"] { display: none; }
+
+.upload-icon { font-size: 30px; margin-bottom: 8px; }
+.upload-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.upload-sub { font-size: 12px; color: #6e6e73; margin-bottom: 12px; }
+
+.file-list { list-style: none; }
+.file-list li {
+  font-size: 12px;
+  padding: 5px 8px;
+  background: #fff;
+  border-radius: 6px;
+  margin-top: 5px;
+  border: 1px solid #d2d2d7;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.file-list li .rm {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #ff3b30;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+/* Report inputs panel */
+.report-inputs-panel {
+  background: #fff;
+  border: 1px solid #d2d2d7;
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 18px;
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.report-inputs-panel .panel-title {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6e6e73;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: -10px;
+}
+.input-group { display: flex; flex-direction: column; gap: 5px; }
+.input-group label { font-size: 12px; font-weight: 500; color: #1d1d1f; }
+.input-group .hint { font-weight: 400; color: #6e6e73; }
+.money-wrap { display: flex; align-items: center; border: 1px solid #d2d2d7; border-radius: 8px; background: #fff; overflow: hidden; }
+.money-wrap span { padding: 7px 10px; background: #f5f5f7; font-size: 13px; color: #6e6e73; border-right: 1px solid #d2d2d7; }
+.money-wrap input { border: none; outline: none; padding: 7px 11px; font-size: 13px; width: 120px; background: transparent; }
+
+/* Action bar */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: opacity .15s, background .15s;
+}
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-primary { background: #0071e3; color: #fff; }
+.btn-primary:not(:disabled):hover { background: #0077ed; }
+.btn-export { background: #34c759; color: #fff; }
+.btn-export:not(:disabled):hover { background: #30b950; }
+.btn-html  { background: #5856d6; color: #fff; }
+.btn-html:not(:disabled):hover  { background: #4f4ec4; }
+.btn-pdf   { background: #ff9f0a; color: #fff; }
+.btn-pdf:not(:disabled):hover   { background: #e8900a; }
+.btn-clear { background: #fff; color: #1d1d1f; border: 1px solid #d2d2d7; }
+.btn-clear:hover { background: #f5f5f7; }
+.btn-seg {
+  padding: 6px 13px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #d2d2d7;
+  color: #1d1d1f;
+  transition: background .12s, color .12s;
+}
+.btn-seg.active { background: #0071e3; color: #fff; border-color: #0071e3; }
+
+.status {
+  font-size: 13px;
+  color: #6e6e73;
+  padding: 7px 14px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #d2d2d7;
+}
+.status.running { color: #ff9f0a; }
+.status.done    { color: #34c759; }
+.status.error   { color: #ff3b30; }
+
+/* Progress */
+.progress-wrap { height: 3px; background: #e5e5ea; border-radius: 2px; margin-bottom: 18px; overflow: hidden; display: none; }
+.progress-bar  { height: 100%; width: 0%; background: #0071e3; border-radius: 2px; transition: width .3s; }
+
+/* Summary bar */
+.summary-bar { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; align-items: flex-start; }
+.stat {
+  background: #fff;
+  border: 1px solid #d2d2d7;
+  border-radius: 10px;
+  padding: 12px 18px;
+  min-width: 120px;
+  position: relative;
+}
+.stat-val   { font-size: 21px; font-weight: 700; }
+.stat-label { font-size: 11px; color: #6e6e73; margin-top: 2px; }
+.stat-dismiss {
+  position: absolute;
+  top: 6px; right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #aaa;
+  line-height: 1;
+  padding: 0;
+}
+.stat-dismiss:hover { color: #ff3b30; }
+
+/* Results header */
+.results-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.results-header h2 { font-size: 16px; font-weight: 600; }
+.badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; background: #0071e3; color: #fff; }
+.badge.warn { background: #ff9f0a; }
+
+/* Filter row */
+.filter-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.filter-row input,
+.filter-row select {
+  padding: 7px 11px;
+  border: 1px solid #d2d2d7;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+}
+.filter-row input { flex: 1; min-width: 200px; }
+
+/* Table */
+.table-wrap { background: #fff; border-radius: 12px; border: 1px solid #d2d2d7; overflow: auto; max-height: 50vh; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+thead { position: sticky; top: 0; background: #f5f5f7; z-index: 2; }
+th {
+  padding: 9px 13px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid #d2d2d7;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+th:hover { color: #0071e3; }
+td {
+  padding: 8px 13px;
+  border-bottom: 1px solid #f0f0f0;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #f9f9fb; }
+tr.unmatched td:first-child { color: #ff3b30; font-style: italic; }
+
+/* Chart */
+.chart-card { background: #fff; border: 1px solid #d2d2d7; border-radius: 12px; padding: 24px; margin-bottom: 22px; }
+.chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+.chart-header h2 { font-size: 16px; font-weight: 600; }
+.seg-group { display: flex; gap: 6px; }
+.chart-wrap { position: relative; height: 320px; }
+
+/* Subscription breakdown */
+.sub-section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:8px; }
+.sub-section-header h2 { font-size:16px; font-weight:600; }
+.sub-charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:22px; }
+@media(max-width:900px){ .sub-charts-grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Customer LTV Lookup</h1>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+    <label style="font-size:12px;color:#6e6e73;font-weight:500;">Currency</label>
+    <select id="currency-select" style="padding:6px 10px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;background:#fff;cursor:pointer;">
+      <option value="$">$ USD</option>
+      <option value="£">£ GBP</option>
+    </select>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="lookup">Customer Lookup</button>
+  <button class="tab-btn" data-tab="orders">Order Trends</button>
+</div>
+
+<!-- ═══════════════════════════ TAB 1: LOOKUP ═══════════════════════════ -->
+<div class="tab-panel active" id="tab-lookup">
+<div class="main">
+  <div class="upload-grid">
+    <div class="upload-card" id="email-card">
+      <label>
+        <input type="file" id="email-input" accept=".csv">
+        <div class="upload-icon">📧</div>
+        <div class="upload-title">Email List CSV</div>
+        <div class="upload-sub">CSV with a "Customer email" column (and optionally a sales column)</div>
+        <ul class="file-list" id="email-list"></ul>
+      </label>
+    </div>
+    <div class="upload-card" id="export-card">
+      <label>
+        <input type="file" id="export-input" accept=".csv,.zip" multiple>
+        <div class="upload-icon">📂</div>
+        <div class="upload-title">Customer Export CSVs</div>
+        <div class="upload-sub">One or more Shopify customer export files (.csv or .zip)</div>
+        <ul class="file-list" id="export-list"></ul>
+      </label>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" id="run-btn" disabled>Run Lookup</button>
+    <button class="btn btn-export" id="export-btn" disabled>Export CSV</button>
+    <button class="btn btn-clear" id="clear-btn">Clear All</button>
+    <div class="status" id="status-box">Upload files above to begin</div>
+  </div>
+
+  <div class="progress-wrap" id="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+
+  <div id="results-section" style="display:none">
+    <div class="summary-bar" id="summary-bar"></div>
+    <div class="results-header">
+      <h2>Results</h2>
+      <span class="badge" id="match-badge"></span>
+      <span class="badge warn" id="nomatch-badge" style="display:none"></span>
+    </div>
+    <div class="filter-row">
+      <input type="text" id="search-input" placeholder="Search by name, email, tags…">
+      <select id="match-filter">
+        <option value="all">All rows</option>
+        <option value="matched">Matched only</option>
+        <option value="unmatched">Unmatched only</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table><thead id="result-thead"></thead><tbody id="result-tbody"></tbody></table>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════ TAB 2: ORDERS ═══════════════════════════ -->
+<div class="tab-panel" id="tab-orders">
+<div class="main">
+
+  <div class="upload-grid">
+    <div class="upload-card" id="o-email-card">
+      <label>
+        <input type="file" id="o-email-input" accept=".csv">
+        <div class="upload-icon">📧</div>
+        <div class="upload-title">Email List CSV</div>
+        <div class="upload-sub">Same list of emails used in the Lookup tab</div>
+        <ul class="file-list" id="o-email-list"></ul>
+      </label>
+    </div>
+    <div class="upload-card" id="o-order-card">
+      <label>
+        <input type="file" id="o-order-input" accept=".csv,.zip" multiple>
+        <div class="upload-icon">🛒</div>
+        <div class="upload-title">Order Export CSVs</div>
+        <div class="upload-sub">One or more Shopify order export files (.csv or .zip)</div>
+        <ul class="file-list" id="o-order-list"></ul>
+      </label>
+    </div>
+  </div>
+
+  <!-- Report inputs -->
+  <div class="report-inputs-panel">
+    <div class="panel-title">Report Settings <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional — shown in exports)</span></div>
+    <div class="input-group">
+      <label>Client Spend <span class="hint">— what they paid us</span></label>
+      <div class="money-wrap"><span>$</span><input type="number" id="o-client-spend" placeholder="0.00" min="0" step="0.01"></div>
+    </div>
+    <div class="input-group">
+      <label>Client Sitewide AOV <span class="hint">— their store average</span></label>
+      <div class="money-wrap"><span>$</span><input type="number" id="o-sitewide-aov" placeholder="0.00" min="0" step="0.01"></div>
+    </div>
+    <div class="input-group">
+      <label>Monthly Spend <span class="hint">— what they pay us / month</span></label>
+      <div class="money-wrap"><span>$</span><input type="number" id="o-monthly-spend" placeholder="0.00" min="0" step="0.01"></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" id="o-run-btn" disabled>Run Analysis</button>
+    <button class="btn btn-export" id="o-export-btn"  disabled>Export CSV</button>
+    <button class="btn btn-html"   id="o-html-btn"    disabled>Export HTML</button>
+    <button class="btn btn-pdf"    id="o-pdf-btn"     disabled>Export PDF</button>
+    <button class="btn btn-clear"  id="o-clear-btn">Clear All</button>
+    <div class="status" id="o-status-box">Upload files above to begin</div>
+  </div>
+
+  <div class="progress-wrap" id="o-progress-wrap"><div class="progress-bar" id="o-progress-bar"></div></div>
+
+  <div id="o-results-section" style="display:none">
+
+    <div class="summary-bar" id="o-summary-bar"></div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <h2 id="chart-title">Revenue Trend</h2>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div class="seg-group" id="metric-group">
+            <button class="btn-seg active" data-metric="revenue">Revenue</button>
+            <button class="btn-seg" data-metric="orders">Order Count</button>
+          </div>
+          <div class="seg-group" id="granularity-group">
+            <button class="btn-seg" data-gran="day">Day</button>
+            <button class="btn-seg" data-gran="week">Week</button>
+            <button class="btn-seg active" data-gran="month">Month</button>
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
+    </div>
+
+    <!-- ── Subscription Breakdown (shown only when sub orders are detected) ── -->
+    <div id="sub-section" style="display:none">
+      <div class="sub-section-header">
+        <h2>Subscription Breakdown</h2>
+        <div class="seg-group" id="sub-gran-group">
+          <button class="btn-seg" data-sub-gran="day">Day</button>
+          <button class="btn-seg" data-sub-gran="week">Week</button>
+          <button class="btn-seg active" data-sub-gran="month">Month</button>
+        </div>
+      </div>
+      <div class="summary-bar" id="sub-summary-bar"></div>
+      <div class="sub-charts-grid">
+        <div class="chart-card" style="margin-bottom:0">
+          <div class="chart-header"><h2>Revenue by Type</h2></div>
+          <div class="chart-wrap"><canvas id="sub-revenue-chart"></canvas></div>
+        </div>
+        <div class="chart-card" style="margin-bottom:0">
+          <div class="chart-header"><h2>Subscriber Trends</h2></div>
+          <div class="chart-wrap"><canvas id="sub-trend-chart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="results-header">
+      <h2>Orders</h2>
+      <span class="badge" id="o-count-badge"></span>
+    </div>
+    <div class="filter-row">
+      <input type="text" id="o-search-input" placeholder="Search by order ID, payment status…">
+    </div>
+    <div class="table-wrap">
+      <table><thead id="o-result-thead"></thead><tbody id="o-result-tbody"></tbody></table>
+    </div>
+
+    <div id="o-unmatched-section" style="display:none;margin-top:26px;">
+      <div class="results-header">
+        <h2>Emails With No Orders</h2>
+        <span class="badge warn" id="o-unmatched-badge"></span>
+      </div>
+      <div class="table-wrap" style="max-height:320px;">
+        <table><thead><tr><th>Email</th></tr></thead><tbody id="o-unmatched-tbody"></tbody></table>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</div>
+
+<script>
+// ── Tab switching ──────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ── Shared helpers ─────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function setStatus(id, msg, type='') { $(id).textContent=msg; $(id).className='status '+type; }
+function setProgress(w, b, pct) { $(w).style.display=pct>=0?'':'none'; $(b).style.width=Math.max(0,pct)+'%'; }
+
+function addFileTag(name, listId, onRemove) {
+  const li = document.createElement('li');
+  li.dataset.name = name;
+  li.innerHTML = `📄 ${name} <button class="rm" title="Remove">×</button>`;
+  li.querySelector('.rm').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); onRemove(name); li.remove(); });
+  $(listId).appendChild(li);
+}
+
+function setupDragDrop(cardId, inputId, onFiles) {
+  const card = $(cardId);
+  card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drag-over'); });
+  card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+  card.addEventListener('drop', e => {
+    e.preventDefault(); card.classList.remove('drag-over');
+    const dt = new DataTransfer();
+    Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.csv')||f.name.endsWith('.zip')).forEach(f => dt.items.add(f));
+    if (dt.files.length) { $(inputId).files = dt.files; onFiles(dt.files); }
+  });
+}
+
+function escCSV(v) {
+  if (v==null) return '';
+  const s = String(v);
+  return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+
+function escHTML(s) {
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let currencySymbol = '$';
+
+$('currency-select').addEventListener('change', function() {
+  currencySymbol = this.value;
+  // Re-render whichever tab has live results
+  if (allRows.length)   renderLookupResults({ total: allRows.length, matched: allRows.filter(r=>r.matched).length, unmatched: allRows.filter(r=>!r.matched).length });
+  if (oData)            renderOrderResults();
+});
+
+function fmtMoney(v) {
+  const n = parseFloat(v);
+  return isNaN(n) ? '—' : currencySymbol + n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function fmt(v) { return (v==null||v==='') ? '—' : v; }
+function today() { return new Date().toISOString().slice(0,10); }
+
+function triggerDownload(content, filename, mime='text/csv') {
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([content],{type:mime})),
+    download: filename,
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 1 — CUSTOMER LOOKUP
+// ══════════════════════════════════════════════════════════════════════════════
+let emailFile=null, exportFiles=[], allRows=[], filteredRows=[], sortCol=null, sortAsc=true;
+
+const COLS = [
+  {key:'email',                         label:'Email'},
+  {key:'sales',                         label:'Sales (list)'},
+  {key:'First Name',                    label:'First Name'},
+  {key:'Last Name',                     label:'Last Name'},
+  {key:'Total Spent',                   label:'Total Spent'},
+  {key:'Total Orders',                  label:'Total Orders'},
+  {key:'Accepts Email Marketing',       label:'Email Mktg'},
+  {key:'Accepts SMS Marketing',         label:'SMS Mktg'},
+  {key:'Phone',                         label:'Phone'},
+  {key:'Default Address City',          label:'City'},
+  {key:'Default Address Province Code', label:'State'},
+  {key:'Default Address Country Code',  label:'Country'},
+  {key:'Default Address Zip',           label:'ZIP'},
+  {key:'Default Address Address1',      label:'Address'},
+  {key:'Tags',                          label:'Tags'},
+  {key:'Tax Exempt',                    label:'Tax Exempt'},
+  {key:'Customer ID',                   label:'Customer ID'},
+  {key:'source',                        label:'Source File'},
+];
+
+$('email-input').addEventListener('change', function() {
+  if (!this.files.length) return;
+  emailFile = this.files[0];
+  $('email-list').innerHTML='';
+  addFileTag(emailFile.name,'email-list',()=>{ emailFile=null; $('email-card').classList.remove('has-files'); updateRunBtn1(); });
+  $('email-card').classList.add('has-files'); updateRunBtn1();
+});
+
+$('export-input').addEventListener('change', function() {
+  Array.from(this.files).forEach(f => {
+    if (exportFiles.find(e=>e.name===f.name)) return;
+    exportFiles.push(f);
+    addFileTag(f.name,'export-list',name=>{ exportFiles=exportFiles.filter(e=>e.name!==name); if(!exportFiles.length)$('export-card').classList.remove('has-files'); updateRunBtn1(); });
+  });
+  if (exportFiles.length) $('export-card').classList.add('has-files'); updateRunBtn1();
+});
+
+setupDragDrop('email-card','email-input',files=>{ $('email-input').files=files; $('email-input').dispatchEvent(new Event('change')); });
+setupDragDrop('export-card','export-input',files=>{ $('export-input').files=files; $('export-input').dispatchEvent(new Event('change')); });
+
+function updateRunBtn1() { $('run-btn').disabled=!(emailFile&&exportFiles.length); }
+
+$('clear-btn').addEventListener('click',()=>{
+  emailFile=null; exportFiles=[]; allRows=[]; filteredRows=[];
+  ['email-list','export-list'].forEach(id=>$(id).innerHTML='');
+  ['email-input','export-input'].forEach(id=>$(id).value='');
+  ['email-card','export-card'].forEach(id=>$(id).classList.remove('has-files'));
+  $('results-section').style.display='none'; $('export-btn').disabled=true;
+  setProgress('progress-wrap','progress-bar',-1);
+  setStatus('status-box','Upload files above to begin'); updateRunBtn1();
+});
+
+$('run-btn').addEventListener('click', async()=>{
+  const t0=performance.now();
+  $('run-btn').disabled=true; $('export-btn').disabled=true;
+  $('results-section').style.display='none';
+  setStatus('status-box','Uploading & processing…','running');
+  setProgress('progress-wrap','progress-bar',10);
+  try {
+    const fd=new FormData();
+    fd.append('emailFile',emailFile);
+    exportFiles.forEach(f=>fd.append('exportFiles',f));
+    setProgress('progress-wrap','progress-bar',40);
+    const res=await fetch('/api/lookup',{method:'POST',body:fd});
+    setProgress('progress-wrap','progress-bar',80);
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error||'Server error');
+    allRows=data.results;
+    setProgress('progress-wrap','progress-bar',100);
+    setTimeout(()=>setProgress('progress-wrap','progress-bar',-1),800);
+    renderLookupResults(data);
+    setStatus('status-box',`Done — ${data.matched} matched, ${data.unmatched} not found`,'done');
+    $('export-btn').disabled=false;
+  } catch(err) {
+    setStatus('status-box','Error: '+err.message,'error');
+    setProgress('progress-wrap','progress-bar',-1);
+  }
+  $('run-btn').disabled=false;
+});
+
+function renderLookupResults(data) {
+  const totalSales=allRows.reduce((s,r)=>s+(parseFloat(r.sales)||0),0);
+  const matchedSales=allRows.filter(r=>r.matched).reduce((s,r)=>s+(parseFloat(r.sales)||0),0);
+  $('summary-bar').innerHTML=`
+    <div class="stat"><div class="stat-val">${data.total.toLocaleString()}</div><div class="stat-label">Emails in list</div></div>
+    <div class="stat"><div class="stat-val" style="color:#34c759">${data.matched.toLocaleString()}</div><div class="stat-label">Matched</div></div>
+    <div class="stat"><div class="stat-val" style="color:#ff3b30">${data.unmatched.toLocaleString()}</div><div class="stat-label">Not found</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(totalSales)}</div><div class="stat-label">Total sales (list)</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(matchedSales)}</div><div class="stat-label">Sales from matched</div></div>`;
+  $('match-badge').textContent=`${data.matched} matched`;
+  $('nomatch-badge').style.display=data.unmatched>0?'':'none';
+  $('nomatch-badge').textContent=`${data.unmatched} unmatched`;
+  const thead=$('result-thead');
+  thead.innerHTML='<tr>'+COLS.map((c,i)=>`<th data-idx="${i}">${c.label} <span style="font-size:9px;color:#aaa">⇅</span></th>`).join('')+'</tr>';
+  thead.querySelectorAll('th').forEach(th=>{ th.addEventListener('click',()=>{ const key=COLS[+th.dataset.idx].key; if(sortCol===key)sortAsc=!sortAsc;else{sortCol=key;sortAsc=true;} applyLookupFilters(); }); });
+  $('results-section').style.display=''; applyLookupFilters();
+}
+
+function applyLookupFilters() {
+  const q=$('search-input').value.toLowerCase(), mf=$('match-filter').value;
+  filteredRows=allRows.filter(r=>{
+    if(mf==='matched'&&!r.matched)return false;
+    if(mf==='unmatched'&&r.matched)return false;
+    if(q){const hay=COLS.map(c=>String(r[c.key]||'')).join(' ').toLowerCase();if(!hay.includes(q))return false;}
+    return true;
+  });
+  if(sortCol){filteredRows.sort((a,b)=>{const av=String(a[sortCol]||''),bv=String(b[sortCol]||'');const an=parseFloat(av),bn=parseFloat(bv);const cmp=(!isNaN(an)&&!isNaN(bn))?an-bn:av.localeCompare(bv);return sortAsc?cmp:-cmp;});}
+  const tbody=$('result-tbody');
+  if(!filteredRows.length){tbody.innerHTML=`<tr><td colspan="${COLS.length}" style="text-align:center;padding:40px;color:#6e6e73">No results</td></tr>`;return;}
+  const frag=document.createDocumentFragment();
+  filteredRows.forEach(r=>{
+    const tr=document.createElement('tr');
+    if(!r.matched)tr.className='unmatched';
+    tr.innerHTML=COLS.map(c=>{let v=fmt(r[c.key]);if((c.key==='sales'||c.key==='Total Spent')&&v!=='—'){const n=parseFloat(v);v=isNaN(n)?v:fmtMoney(v);}return`<td title="${String(r[c.key]||'').replace(/"/g,'&quot;')}">${v}</td>`;}).join('');
+    frag.appendChild(tr);
+  });
+  tbody.innerHTML=''; tbody.appendChild(frag);
+}
+
+$('search-input').addEventListener('input',applyLookupFilters);
+$('match-filter').addEventListener('change',applyLookupFilters);
+
+$('export-btn').addEventListener('click',()=>{
+  const exportCols=[...COLS,{key:'matched',label:'Matched'},{key:'Default Address Address2',label:'Address 2'},{key:'Default Address Company',label:'Company'},{key:'Note',label:'Note'}];
+  const lines=[exportCols.map(c=>c.label).join(',')];
+  filteredRows.forEach(r=>lines.push(exportCols.map(c=>escCSV(c.key==='matched'?(r.matched?'Yes':'No'):(r[c.key]??''))).join(',')));
+  triggerDownload(lines.join('\n'),`customer_lookup_${today()}.csv`);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 2 — ORDER TRENDS
+// ══════════════════════════════════════════════════════════════════════════════
+let oEmailFile=null, oOrderFiles=[], oData=null, oFilteredOrders=[];
+let oSortCol=null, oSortAsc=true;
+let chartGran='month', chartMetric='revenue';
+let trendChart=null;
+let aovDismissed=false, roiDismissed=false;
+let subGran='month', subRevenueChart=null, subTrendChart=null;
+
+// Columns shown in the table (no Email, Currency, Source File)
+const ORDER_TABLE_COLS = [
+  {key:'id',                label:'Order #'},
+  {key:'createdAt',         label:'Created At'},
+  {key:'total',             label:'Total'},
+  {key:'financialStatus',   label:'Payment'},
+  {key:'fulfillmentStatus', label:'Fulfillment'},
+];
+
+// All columns for CSV export
+const ORDER_CSV_COLS = [
+  {key:'id',                label:'Order #'},
+  {key:'email',             label:'Email'},
+  {key:'createdAt',         label:'Created At'},
+  {key:'total',             label:'Total'},
+  {key:'financialStatus',   label:'Payment'},
+  {key:'fulfillmentStatus', label:'Fulfillment'},
+  {key:'currency',          label:'Currency'},
+  {key:'source',            label:'Source File'},
+];
+
+$('o-email-input').addEventListener('change', function(){
+  if(!this.files.length)return;
+  oEmailFile=this.files[0]; $('o-email-list').innerHTML='';
+  addFileTag(oEmailFile.name,'o-email-list',()=>{ oEmailFile=null; $('o-email-card').classList.remove('has-files'); updateRunBtn2(); });
+  $('o-email-card').classList.add('has-files'); updateRunBtn2();
+});
+
+$('o-order-input').addEventListener('change', function(){
+  Array.from(this.files).forEach(f=>{
+    if(oOrderFiles.find(e=>e.name===f.name))return;
+    oOrderFiles.push(f);
+    addFileTag(f.name,'o-order-list',name=>{ oOrderFiles=oOrderFiles.filter(e=>e.name!==name); if(!oOrderFiles.length)$('o-order-card').classList.remove('has-files'); updateRunBtn2(); });
+  });
+  if(oOrderFiles.length)$('o-order-card').classList.add('has-files'); updateRunBtn2();
+});
+
+setupDragDrop('o-email-card','o-email-input',files=>{ $('o-email-input').files=files; $('o-email-input').dispatchEvent(new Event('change')); });
+setupDragDrop('o-order-card','o-order-input',files=>{ $('o-order-input').files=files; $('o-order-input').dispatchEvent(new Event('change')); });
+
+function updateRunBtn2(){ $('o-run-btn').disabled=!(oEmailFile&&oOrderFiles.length); }
+
+// Re-render summary whenever inputs change (live update)
+['o-client-spend','o-sitewide-aov'].forEach(id=>{
+  $(id).addEventListener('input',()=>{ if(oData) renderSummaryBar(); });
+});
+$('o-monthly-spend').addEventListener('input',()=>{ if(trendChart) renderChart(); });
+
+function getMonthlySpend(){ return parseFloat($('o-monthly-spend').value)||0; }
+
+$('o-clear-btn').addEventListener('click',()=>{
+  oEmailFile=null; oOrderFiles=[]; oData=null; oFilteredOrders=[]; aovDismissed=false; roiDismissed=false;
+  ['o-email-list','o-order-list'].forEach(id=>$(id).innerHTML='');
+  ['o-email-input','o-order-input'].forEach(id=>$(id).value='');
+  ['o-email-card','o-order-card'].forEach(id=>$(id).classList.remove('has-files'));
+  $('o-results-section').style.display='none';
+  $('o-unmatched-section').style.display='none';
+  ['o-export-btn','o-html-btn','o-pdf-btn'].forEach(id=>$(id).disabled=true);
+  if(trendChart){trendChart.destroy();trendChart=null;}
+  if(subRevenueChart){subRevenueChart.destroy();subRevenueChart=null;}
+  if(subTrendChart){subTrendChart.destroy();subTrendChart=null;}
+  $('sub-section').style.display='none';
+  setProgress('o-progress-wrap','o-progress-bar',-1);
+  setStatus('o-status-box','Upload files above to begin'); updateRunBtn2();
+});
+
+$('o-run-btn').addEventListener('click', async()=>{
+  const t0=performance.now(); aovDismissed=false; roiDismissed=false;
+  ['o-run-btn','o-export-btn','o-html-btn','o-pdf-btn'].forEach(id=>$(id).disabled=true);
+  $('o-results-section').style.display='none';
+  setStatus('o-status-box','Uploading & processing…','running');
+  setProgress('o-progress-wrap','o-progress-bar',10);
+  try {
+    const fd=new FormData();
+    fd.append('emailFile',oEmailFile);
+    oOrderFiles.forEach(f=>fd.append('orderFiles',f));
+    setProgress('o-progress-wrap','o-progress-bar',40);
+    const res=await fetch('/api/orders',{method:'POST',body:fd});
+    setProgress('o-progress-wrap','o-progress-bar',80);
+    oData=await res.json();
+    if(!res.ok) throw new Error(oData.error||'Server error');
+    setProgress('o-progress-wrap','o-progress-bar',100);
+    setTimeout(()=>setProgress('o-progress-wrap','o-progress-bar',-1),800);
+    renderOrderResults();
+    const elapsed=((performance.now()-t0)/1000).toFixed(2);
+    setStatus('o-status-box',`Done — ${oData.totalOrders.toLocaleString()} orders from ${oData.uniqueCustomers.toLocaleString()} customers (${elapsed}s)`,'done');
+    ['o-export-btn','o-html-btn','o-pdf-btn'].forEach(id=>$(id).disabled=false);
+  } catch(err) {
+    setStatus('o-status-box','Error: '+err.message,'error');
+    setProgress('o-progress-wrap','o-progress-bar',-1);
+  }
+  $('o-run-btn').disabled=false;
+});
+
+function getClientSpend(){ return parseFloat($('o-client-spend').value)||0; }
+function getSitewideAOV(){ return parseFloat($('o-sitewide-aov').value)||0; }
+
+function renderSummaryBar() {
+  const ourAOV = oData.totalRevenue / (oData.totalOrders||1);
+  const clientSpend = getClientSpend();
+  const sitewideAOV = getSitewideAOV();
+
+  let html = `
+    <div class="stat"><div class="stat-val">${oData.totalOrders.toLocaleString()}</div><div class="stat-label">Matched orders</div></div>
+    <div class="stat"><div class="stat-val">${oData.uniqueCustomers.toLocaleString()}</div><div class="stat-label">Unique customers</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(oData.totalRevenue)}</div><div class="stat-label">Total revenue</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(oData.totalRevenue/(oData.uniqueCustomers||1))}</div><div class="stat-label">Avg revenue / customer</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(ourAOV)}</div><div class="stat-label">Our AOV</div></div>`;
+
+  // AOV comparison — rendered immediately after Our AOV so all 3 are adjacent
+  if (sitewideAOV > 0 && !aovDismissed) {
+    const diff      = ourAOV - sitewideAOV;
+    const liftPct   = (diff / sitewideAOV) * 100;
+    const liftColor = diff >= 0 ? '#34c759' : '#ff3b30';
+    const liftSign  = diff >= 0 ? '+' : '';
+    const liftLabel = diff >= 0 ? 'AOV lift over sitewide' : 'AOV below sitewide';
+    html += `
+    <div class="stat" id="aov-compare-stat">
+      <button class="stat-dismiss" id="aov-dismiss-btn" title="Remove from report">×</button>
+      <div class="stat-val">${fmtMoney(sitewideAOV)}</div>
+      <div class="stat-label">Client sitewide AOV</div>
+    </div>
+    <div class="stat" id="aov-lift-stat">
+      <div class="stat-val" style="color:${liftColor}">${liftSign}${liftPct.toFixed(1)}%</div>
+      <div class="stat-label">${liftLabel}</div>
+      <div style="font-size:11px;color:#6e6e73;margin-top:3px">${fmtMoney(ourAOV)} vs ${fmtMoney(sitewideAOV)}</div>
+    </div>`;
+  }
+
+  if (clientSpend > 0 && !roiDismissed) {
+    const roi   = oData.totalRevenue / clientSpend;
+    const color = roi >= 1 ? '#34c759' : '#ff3b30';
+    html += `
+    <div class="stat" id="roi-spend-stat">
+      <button class="stat-dismiss" id="roi-dismiss-btn" title="Remove from report">×</button>
+      <div class="stat-val">${fmtMoney(clientSpend)}</div>
+      <div class="stat-label">Client spend</div>
+    </div>
+    <div class="stat" id="roi-roas-stat">
+      <div class="stat-val" style="color:${color}">${roi.toFixed(2)}x</div>
+      <div class="stat-label">ROI</div>
+      <div style="font-size:11px;color:#6e6e73;margin-top:3px">per ${currencySymbol}1 spent</div>
+    </div>`;
+  }
+
+  $('o-summary-bar').innerHTML = html;
+
+  // Wire AOV dismiss
+  const aovDismissBtn = $('aov-dismiss-btn');
+  if (aovDismissBtn) {
+    aovDismissBtn.addEventListener('click', ()=>{
+      aovDismissed = true;
+      $('aov-compare-stat')?.remove();
+      $('aov-lift-stat')?.remove();
+    });
+  }
+
+  // Wire ROI dismiss
+  const roiDismissBtn = $('roi-dismiss-btn');
+  if (roiDismissBtn) {
+    roiDismissBtn.addEventListener('click', ()=>{
+      roiDismissed = true;
+      $('roi-spend-stat')?.remove();
+      $('roi-roas-stat')?.remove();
+    });
+  }
+}
+
+function renderOrderResults() {
+  renderSummaryBar();
+  $('o-count-badge').textContent=`${oData.totalOrders.toLocaleString()} orders`;
+
+  const thead=$('o-result-thead');
+  thead.innerHTML='<tr>'+ORDER_TABLE_COLS.map((c,i)=>`<th data-idx="${i}">${c.label} <span style="font-size:9px;color:#aaa">⇅</span></th>`).join('')+'</tr>';
+  thead.querySelectorAll('th').forEach(th=>{
+    th.addEventListener('click',()=>{
+      const key=ORDER_TABLE_COLS[+th.dataset.idx].key;
+      if(oSortCol===key)oSortAsc=!oSortAsc;else{oSortCol=key;oSortAsc=true;}
+      applyOrderFilters();
+    });
+  });
+
+  $('o-results-section').style.display='';
+  renderChart(); renderSubSection(); applyOrderFilters(); renderUnmatched();
+}
+
+function renderUnmatched() {
+  const emails = oData.unmatchedEmails || [];
+  if (!emails.length) { $('o-unmatched-section').style.display='none'; return; }
+  $('o-unmatched-badge').textContent = emails.length + ' emails';
+  const frag = document.createDocumentFragment();
+  emails.forEach(e => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escHTML(e)}</td>`;
+    frag.appendChild(tr);
+  });
+  const tbody = $('o-unmatched-tbody');
+  tbody.innerHTML = '';
+  tbody.appendChild(frag);
+  $('o-unmatched-section').style.display = '';
+}
+
+function getBuckets() {
+  const key=chartGran==='day'?'byDay':chartGran==='week'?'byWeek':'byMonth';
+  return oData[key]||[];
+}
+
+function renderChart() {
+  const buckets=getBuckets();
+  const labels=buckets.map(b=>b.date);
+  const values=buckets.map(b=>chartMetric==='revenue'?b.total:b.count);
+  $('chart-title').textContent=chartMetric==='revenue'?'Revenue Trend':'Order Count Trend';
+  if(trendChart)trendChart.destroy();
+
+  const monthlySpend = getMonthlySpend();
+  const datasets = [{
+    type:'bar',
+    label: chartMetric==='revenue'?'Revenue':'Order Count',
+    data: values,
+    backgroundColor:'rgba(0,113,227,0.75)',
+    borderColor:'#0071e3', borderWidth:1, borderRadius:4,
+    order:2,
+  }];
+
+  if(monthlySpend > 0 && chartMetric==='revenue') {
+    datasets.push({
+      type:'line',
+      label:'Monthly spend',
+      data: labels.map(()=>monthlySpend),
+      borderColor:'#FFD60A',
+      borderWidth:2.5,
+      borderDash:[6,4],
+      pointRadius:0,
+      pointHoverRadius:4,
+      pointHoverBackgroundColor:'#FFD60A',
+      fill:false,
+      tension:0,
+      order:1,
+    });
+  }
+
+  const ctx=$('trend-chart').getContext('2d');
+  trendChart=new Chart(ctx,{
+    type:'bar',
+    data:{labels, datasets},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{
+          display: monthlySpend > 0 && chartMetric==='revenue',
+          labels:{ boxWidth:14, font:{size:12}, color:'#1d1d1f' },
+        },
+        tooltip:{
+          callbacks:{
+            label: ctx => {
+              if(ctx.dataset.label==='Monthly spend') return 'Monthly spend: '+currencySymbol+ctx.parsed.y.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+              return chartMetric==='revenue'?currencySymbol+ctx.parsed.y.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):ctx.parsed.y+' orders';
+            },
+          },
+        },
+      },
+      scales:{
+        x:{grid:{display:false}},
+        y:{beginAtZero:true,ticks:{callback:v=>chartMetric==='revenue'?currencySymbol+v.toLocaleString():v}},
+      },
+    },
+  });
+}
+
+// ── Subscription breakdown ─────────────────────────────────────────────────────
+function getSubBuckets() {
+  const key = subGran==='day'?'subByDay':subGran==='week'?'subByWeek':'subByMonth';
+  return (oData.subStats && oData.subStats[key]) || [];
+}
+
+function renderSubSection() {
+  if (!oData || !oData.hasSubscriptions) { $('sub-section').style.display='none'; return; }
+  $('sub-section').style.display='';
+  const s = oData.subStats;
+  const nonSubPct = oData.totalRevenue > 0 ? (s.nonSubRevenue / oData.totalRevenue * 100).toFixed(1) : '0.0';
+  $('sub-summary-bar').innerHTML = `
+    <div class="stat"><div class="stat-val">${s.totalSubOrders.toLocaleString()}</div><div class="stat-label">Total sub orders</div></div>
+    <div class="stat"><div class="stat-val" style="color:#5856d6">${s.newSubscribers.toLocaleString()}</div><div class="stat-label">New subscribers</div></div>
+    <div class="stat"><div class="stat-val" style="color:#34c759">${s.recurringOrders.toLocaleString()}</div><div class="stat-label">Recurring orders</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(s.subRevenue)}</div><div class="stat-label">Sub revenue <span style="color:#5856d6;font-weight:600">${s.subRevenuePercent}%</span></div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(s.nonSubRevenue)}</div><div class="stat-label">Non-sub revenue <span style="color:#0071e3;font-weight:600">${nonSubPct}%</span></div></div>
+    <div class="stat"><div class="stat-val">${s.uniqueSubscribers.toLocaleString()}</div><div class="stat-label">Unique subscribers</div></div>
+    <div class="stat"><div class="stat-val">${s.avgRecurPerSub.toFixed(1)}</div><div class="stat-label">Avg recurring / sub</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(s.firstAOV)}</div><div class="stat-label">First order AOV</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(s.recurAOV)}</div><div class="stat-label">Recurring AOV</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(s.nonSubAOV)}</div><div class="stat-label">Non-sub AOV</div></div>`;
+  renderSubCharts();
+}
+
+function renderSubCharts() {
+  const buckets = getSubBuckets();
+  const labels  = buckets.map(b => b.date);
+  if (subRevenueChart) subRevenueChart.destroy();
+  subRevenueChart = new Chart($('sub-revenue-chart').getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label:'First Sub Orders', data:buckets.map(b=>b.subRevenue),    backgroundColor:'rgba(88,86,214,0.85)',  borderColor:'#5856d6', borderWidth:1, stack:'rev' },
+      { label:'Recurring Orders', data:buckets.map(b=>b.recurRevenue),  backgroundColor:'rgba(52,199,89,0.85)',  borderColor:'#34c759', borderWidth:1, stack:'rev' },
+      { label:'Non-Subscription', data:buckets.map(b=>b.nonSubRevenue), backgroundColor:'rgba(0,113,227,0.75)', borderColor:'#0071e3', borderWidth:1, stack:'rev' },
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend:{ display:true, labels:{boxWidth:12,font:{size:11},color:'#1d1d1f'} },
+        tooltip:{ callbacks:{ label:c=>`${c.dataset.label}: ${currencySymbol}${c.parsed.y.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` } },
+      },
+      scales:{
+        x:{ stacked:true, grid:{display:false} },
+        y:{ stacked:true, beginAtZero:true, ticks:{callback:v=>currencySymbol+v.toLocaleString()} },
+      },
+    },
+  });
+  if (subTrendChart) subTrendChart.destroy();
+  subTrendChart = new Chart($('sub-trend-chart').getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { label:'New Subscribers',  data:buckets.map(b=>b.firstCount), borderColor:'#5856d6', backgroundColor:'rgba(88,86,214,0.1)', fill:true, tension:0.3, pointRadius:3, pointHoverRadius:5 },
+      { label:'Recurring Orders', data:buckets.map(b=>b.recurCount), borderColor:'#34c759', backgroundColor:'rgba(52,199,89,0.1)',  fill:true, tension:0.3, pointRadius:3, pointHoverRadius:5 },
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend:{ display:true, labels:{boxWidth:12,font:{size:11},color:'#1d1d1f'} },
+        tooltip:{ callbacks:{ label:c=>`${c.dataset.label}: ${c.parsed.y}` } },
+      },
+      scales:{
+        x:{ grid:{display:false} },
+        y:{ beginAtZero:true, ticks:{precision:0} },
+      },
+    },
+  });
+}
+
+document.querySelectorAll('[data-sub-gran]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-sub-gran]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active'); subGran = btn.dataset.subGran;
+    if (oData && oData.hasSubscriptions) renderSubCharts();
+  });
+});
+
+document.querySelectorAll('[data-gran]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('[data-gran]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); chartGran=btn.dataset.gran;
+    if(trendChart)renderChart();
+  });
+});
+document.querySelectorAll('[data-metric]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('[data-metric]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); chartMetric=btn.dataset.metric;
+    if(trendChart)renderChart();
+  });
+});
+
+function applyOrderFilters() {
+  const q=$('o-search-input').value.toLowerCase();
+  oFilteredOrders=(oData.orders||[]).filter(r=>{
+    if(!q)return true;
+    return ORDER_TABLE_COLS.map(c=>String(r[c.key]||'')).join(' ').toLowerCase().includes(q);
+  });
+  if(oSortCol){
+    oFilteredOrders.sort((a,b)=>{
+      const av=String(a[oSortCol]||''),bv=String(b[oSortCol]||'');
+      const an=parseFloat(av),bn=parseFloat(bv);
+      const cmp=(!isNaN(an)&&!isNaN(bn))?an-bn:av.localeCompare(bv);
+      return oSortAsc?cmp:-cmp;
+    });
+  }
+  const tbody=$('o-result-tbody');
+  if(!oFilteredOrders.length){tbody.innerHTML=`<tr><td colspan="${ORDER_TABLE_COLS.length}" style="text-align:center;padding:40px;color:#6e6e73">No results</td></tr>`;return;}
+  const frag=document.createDocumentFragment();
+  oFilteredOrders.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=ORDER_TABLE_COLS.map(c=>{let v=fmt(r[c.key]);if(c.key==='total'&&v!=='—')v=fmtMoney(r[c.key]);return`<td title="${String(r[c.key]||'').replace(/"/g,'&quot;')}">${v}</td>`;}).join('');
+    frag.appendChild(tr);
+  });
+  tbody.innerHTML=''; tbody.appendChild(frag);
+}
+
+$('o-search-input').addEventListener('input',applyOrderFilters);
+
+$('o-export-btn').addEventListener('click',()=>{
+  const lines=[ORDER_CSV_COLS.map(c=>c.label).join(',')];
+  oFilteredOrders.forEach(r=>lines.push(ORDER_CSV_COLS.map(c=>escCSV(r[c.key]??'')).join(',')));
+  triggerDownload(lines.join('\n'),`order_trends_${today()}.csv`);
+});
+
+// ── Build report HTML (shared by HTML + PDF exports) ──────────────────────────
+function buildReportHTML(forPrint=false) {
+  const clientSpend  = getClientSpend();
+  const sitewideAOV  = getSitewideAOV();
+  const ourAOV       = oData.totalRevenue / (oData.totalOrders||1);
+  const generatedAt  = new Date().toLocaleString();
+
+  // ─ Sub section stats (pre-rendered for export) ─
+  let subStatsHTMLForExport = '';
+  if (oData.hasSubscriptions && oData.subStats) {
+    const s = oData.subStats;
+    const nonSubPct = oData.totalRevenue > 0 ? (s.nonSubRevenue / oData.totalRevenue * 100).toFixed(1) : '0.0';
+    subStatsHTMLForExport = `
+    <div class="stat"><div class="stat-val">${s.totalSubOrders.toLocaleString()}</div><div class="stat-label">Total sub orders</div></div>
+    <div class="stat"><div class="stat-val" style="color:#5856d6">${s.newSubscribers.toLocaleString()}</div><div class="stat-label">New subscribers</div></div>
+    <div class="stat"><div class="stat-val" style="color:#34c759">${s.recurringOrders.toLocaleString()}</div><div class="stat-label">Recurring orders</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(s.subRevenue)}</div><div class="stat-label">Sub revenue <span style="color:#5856d6;font-weight:600">${s.subRevenuePercent}%</span></div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(s.nonSubRevenue)}</div><div class="stat-label">Non-sub revenue <span style="color:#0071e3;font-weight:600">${nonSubPct}%</span></div></div>
+    <div class="stat"><div class="stat-val">${s.uniqueSubscribers.toLocaleString()}</div><div class="stat-label">Unique subscribers</div></div>
+    <div class="stat"><div class="stat-val">${s.avgRecurPerSub.toFixed(1)}</div><div class="stat-label">Avg recurring / sub</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(s.firstAOV)}</div><div class="stat-label">First order AOV</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(s.recurAOV)}</div><div class="stat-label">Recurring AOV</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(s.nonSubAOV)}</div><div class="stat-label">Non-sub AOV</div></div>`;
+  }
+
+  // ─ Summary stat cards ─
+  let statsHTML = `
+    <div class="stat"><div class="stat-val">${oData.totalOrders.toLocaleString()}</div><div class="stat-label">Matched orders</div></div>
+    <div class="stat"><div class="stat-val">${oData.uniqueCustomers.toLocaleString()}</div><div class="stat-label">Unique customers</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(oData.totalRevenue)}</div><div class="stat-label">Total revenue</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(oData.totalRevenue/(oData.uniqueCustomers||1))}</div><div class="stat-label">Avg revenue / customer</div></div>
+    <div class="stat"><div class="stat-val">${fmtMoney(ourAOV)}</div><div class="stat-label">Our AOV</div></div>`;
+
+  // AOV comparison — immediately after Our AOV so all 3 are adjacent
+  if (sitewideAOV > 0 && !aovDismissed) {
+    const diff      = ourAOV - sitewideAOV;
+    const liftPct   = (diff / sitewideAOV) * 100;
+    const liftColor = diff >= 0 ? '#34c759' : '#ff3b30';
+    const liftSign  = diff >= 0 ? '+' : '';
+    const liftLabel = diff >= 0 ? 'AOV lift over sitewide' : 'AOV below sitewide';
+    statsHTML += `
+    <div class="stat">
+      <div class="stat-val">${fmtMoney(sitewideAOV)}</div>
+      <div class="stat-label">Client sitewide AOV</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" style="color:${liftColor}">${liftSign}${liftPct.toFixed(1)}%</div>
+      <div class="stat-label">${liftLabel}</div>
+      <div style="font-size:11px;color:#6e6e73;margin-top:3px">${fmtMoney(ourAOV)} vs ${fmtMoney(sitewideAOV)}</div>
+    </div>`;
+  }
+
+  if (clientSpend > 0 && !roiDismissed) {
+    const roi   = oData.totalRevenue / clientSpend;
+    const color = roi >= 1 ? '#34c759' : '#ff3b30';
+    statsHTML += `
+    <div class="stat">
+      <div class="stat-val">${fmtMoney(clientSpend)}</div>
+      <div class="stat-label">Client spend</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" style="color:${color}">${roi.toFixed(2)}x</div>
+      <div class="stat-label">ROI</div>
+      <div style="font-size:11px;color:#6e6e73;margin-top:3px">per ${currencySymbol}1 spent</div>
+    </div>`;
+  }
+
+  // ─ Table rows ─
+  const tableHeaders = ORDER_TABLE_COLS.map(c=>`<th>${escHTML(c.label)}</th>`).join('');
+  const tableRows    = (oData.orders||[]).map(r=>`<tr>${ORDER_TABLE_COLS.map(c=>{let v=r[c.key]??'';if(c.key==='total')v=fmtMoney(v);return`<td>${escHTML(v)}</td>`;}).join('')}</tr>`).join('');
+
+  // ─ Embed data for interactive chart ─
+  const embeddedData = JSON.stringify({
+    byDay:            oData.byDay            || [],
+    byWeek:           oData.byWeek           || [],
+    byMonth:          oData.byMonth          || [],
+    subStats:         oData.subStats         || null,
+    hasSubscriptions: oData.hasSubscriptions || false,
+  });
+
+  const printScript = forPrint ? '<script>window.onload=()=>{ setTimeout(()=>window.print(),400); }<\/script>' : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Order Trends Report — ${today()}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"><\/script>
+${printScript}
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f5f7;color:#1d1d1f;padding:28px;}
+  .report-header{background:#fff;border-radius:12px;border:1px solid #d2d2d7;padding:20px 26px;margin-bottom:20px;display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+  .report-header h1{font-size:20px;font-weight:700;}
+  .report-meta{font-size:12px;color:#6e6e73;}
+  .summary-bar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;}
+  .stat{background:#fff;border:1px solid #d2d2d7;border-radius:10px;padding:11px 16px;min-width:110px;}
+  .stat-val{font-size:19px;font-weight:700;}
+  .stat-label{font-size:10px;color:#6e6e73;margin-top:2px;}
+  .chart-card{background:#fff;border-radius:12px;border:1px solid #d2d2d7;padding:20px 22px;margin-bottom:20px;}
+  .chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+  .chart-header h2{font-size:15px;font-weight:600;}
+  .chart-controls{display:flex;gap:14px;flex-wrap:wrap;}
+  .seg-group{display:flex;gap:6px;}
+  .btn-seg{padding:5px 12px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;background:#fff;border:1px solid #d2d2d7;color:#1d1d1f;}
+  .btn-seg.active{background:#0071e3;color:#fff;border-color:#0071e3;}
+  .chart-wrap{position:relative;height:300px;}
+  .sub-section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+  .sub-section-header h2{font-size:15px;font-weight:600;}
+  .sub-charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+  .table-section{background:#fff;border-radius:12px;border:1px solid #d2d2d7;}
+  .table-title{font-size:15px;font-weight:600;padding:14px 18px 10px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:8px;}
+  .table-title span{font-size:12px;font-weight:400;color:#6e6e73;}
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  thead{display:table-header-group;}
+  th{padding:8px 12px;text-align:left;font-weight:600;background:#f5f5f7;border-bottom:1px solid #d2d2d7;white-space:nowrap;}
+  td{padding:7px 12px;border-bottom:1px solid #f0f0f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  tr:nth-child(even) td{background:#fafafa;}
+
+  @media print{
+    *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
+    @page{margin:12mm 14mm;}
+    body{background:#fff!important;padding:0;}
+    .report-header{border:1px solid #d2d2d7;box-shadow:none;margin-bottom:12px;padding:12px 16px;}
+    .report-header h1{font-size:16px;}
+    .summary-bar{gap:6px;margin-bottom:12px;flex-wrap:nowrap;}
+    .stat{padding:7px 9px;min-width:0;flex:1;border-radius:7px;}
+    .stat-val{font-size:13px;}
+    .stat-label{font-size:8.5px;}
+    .stat > div[style]{font-size:9px!important;}
+    .chart-controls{display:none!important;}
+    .sub-section-header .seg-group{display:none!important;}
+    .sub-charts-grid{grid-template-columns:1fr 1fr;}
+    .chart-card{padding:12px 14px;margin-bottom:12px;page-break-inside:avoid;}
+    .chart-wrap{height:200px;}
+    .table-section{border:1px solid #d2d2d7;}
+    .table-title{padding:10px 12px 8px;font-size:13px;}
+    th{padding:6px 9px;font-size:10.5px;background:#f5f5f7!important;}
+    td{padding:5px 9px;font-size:10.5px;}
+    tr{page-break-inside:avoid;}
+    tr:nth-child(even) td{background:#fafafa!important;}
+  }
+</style>
+</head>
+<body>
+
+<div class="report-header">
+  <h1>Order Trends Report</h1>
+  <div class="report-meta">Generated ${generatedAt}</div>
+</div>
+
+<div class="summary-bar">${statsHTML}</div>
+
+<div class="chart-card">
+  <div class="chart-header">
+    <h2 id="r-chart-title">Revenue Trend</h2>
+    <div class="chart-controls">
+      <div class="seg-group">
+        <button class="btn-seg active" onclick="setMetric('revenue',this)">Revenue</button>
+        <button class="btn-seg"        onclick="setMetric('orders',this)">Order Count</button>
+      </div>
+      <div class="seg-group">
+        <button class="btn-seg"        onclick="setGran('day',this)">Day</button>
+        <button class="btn-seg"        onclick="setGran('week',this)">Week</button>
+        <button class="btn-seg active" onclick="setGran('month',this)">Month</button>
+      </div>
+    </div>
+  </div>
+  <div class="chart-wrap"><canvas id="r-chart"></canvas></div>
+</div>
+
+${oData.hasSubscriptions ? `
+<div style="margin-bottom:4px;">
+  <div class="sub-section-header">
+    <h2>Subscription Breakdown</h2>
+    <div class="seg-group" id="r-sub-gran-group">
+      <button class="btn-seg" onclick="setSubGran('day',this)">Day</button>
+      <button class="btn-seg" onclick="setSubGran('week',this)">Week</button>
+      <button class="btn-seg active" onclick="setSubGran('month',this)">Month</button>
+    </div>
+  </div>
+  <div class="summary-bar" style="margin-bottom:16px;">${subStatsHTMLForExport}</div>
+  <div class="sub-charts-grid">
+    <div class="chart-card" style="margin-bottom:0">
+      <div class="chart-header"><h2>Revenue by Type</h2></div>
+      <div class="chart-wrap"><canvas id="r-sub-rev-chart"></canvas></div>
+    </div>
+    <div class="chart-card" style="margin-bottom:0">
+      <div class="chart-header"><h2>Subscriber Trends</h2></div>
+      <div class="chart-wrap"><canvas id="r-sub-trend-chart"></canvas></div>
+    </div>
+  </div>
+</div>
+` : ''}
+
+<div class="table-section">
+  <div class="table-title">Orders <span>${(oData.orders||[]).length.toLocaleString()} total</span></div>
+  <table>
+    <thead><tr>${tableHeaders}</tr></thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+</div>
+
+${(oData.unmatchedEmails||[]).length ? `
+<div class="table-section" style="margin-top:20px;">
+  <div class="table-title">Emails With No Orders <span>${(oData.unmatchedEmails||[]).length.toLocaleString()} emails</span></div>
+  <table>
+    <thead><tr><th>Email</th></tr></thead>
+    <tbody>${(oData.unmatchedEmails||[]).map(e=>`<tr><td>${escHTML(e)}</td></tr>`).join('')}</tbody>
+  </table>
+</div>` : ''}
+
+<script>
+const _data = ${embeddedData};
+const _currency = ${JSON.stringify(currencySymbol)};
+const _monthlySpend = ${JSON.stringify(getMonthlySpend())};
+let _metric = 'revenue', _gran = 'month', _chart = null;
+
+function getBuckets() {
+  return _gran==='day'?_data.byDay:_gran==='week'?_data.byWeek:_data.byMonth;
+}
+
+function renderChart() {
+  const buckets = getBuckets();
+  const labels  = buckets.map(b=>b.date);
+  const values  = buckets.map(b=>_metric==='revenue'?b.total:b.count);
+  document.getElementById('r-chart-title').textContent = _metric==='revenue'?'Revenue Trend':'Order Count Trend';
+  if (_chart) _chart.destroy();
+
+  const datasets = [{
+    type:'bar', label:_metric==='revenue'?'Revenue':'Order Count',
+    data:values, backgroundColor:'rgba(0,113,227,0.75)',
+    borderColor:'#0071e3', borderWidth:1, borderRadius:4, order:2,
+  }];
+  if (_monthlySpend > 0 && _metric==='revenue') {
+    datasets.push({
+      type:'line', label:'Monthly spend',
+      data:labels.map(()=>_monthlySpend),
+      borderColor:'#FFD60A', borderWidth:2.5, borderDash:[6,4],
+      pointRadius:0, pointHoverRadius:4, pointHoverBackgroundColor:'#FFD60A',
+      fill:false, tension:0, order:1,
+    });
+  }
+
+  _chart = new Chart(document.getElementById('r-chart').getContext('2d'), {
+    type:'bar',
+    data:{labels, datasets},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:_monthlySpend>0&&_metric==='revenue',labels:{boxWidth:14,font:{size:12}}},
+        tooltip:{callbacks:{label:ctx=>{
+          if(ctx.dataset.label==='Monthly spend') return 'Monthly spend: '+_currency+ctx.parsed.y.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+          return _metric==='revenue'?_currency+ctx.parsed.y.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):ctx.parsed.y+' orders';
+        }}},
+      },
+      scales:{x:{grid:{display:false}},y:{beginAtZero:true,ticks:{callback:v=>_metric==='revenue'?_currency+v.toLocaleString():v}}},
+    },
+  });
+}
+
+function setMetric(m, btn) {
+  _metric = m;
+  btn.closest('.seg-group').querySelectorAll('.btn-seg').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderChart();
+}
+
+function setGran(g, btn) {
+  _gran = g;
+  btn.closest('.seg-group').querySelectorAll('.btn-seg').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderChart();
+}
+
+let _subGran = 'month', _subRevChart = null, _subTrendChart = null;
+
+function getSubBuckets() {
+  const key = _subGran==='day'?'subByDay':_subGran==='week'?'subByWeek':'subByMonth';
+  return (_data.subStats && _data.subStats[key]) || [];
+}
+
+function renderSubCharts() {
+  const buckets = getSubBuckets();
+  const labels  = buckets.map(b => b.date);
+  if (_subRevChart) _subRevChart.destroy();
+  _subRevChart = new Chart(document.getElementById('r-sub-rev-chart').getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label:'First Sub Orders', data:buckets.map(b=>b.subRevenue),    backgroundColor:'rgba(88,86,214,0.85)',  borderColor:'#5856d6', borderWidth:1, stack:'rev' },
+      { label:'Recurring Orders', data:buckets.map(b=>b.recurRevenue),  backgroundColor:'rgba(52,199,89,0.85)',  borderColor:'#34c759', borderWidth:1, stack:'rev' },
+      { label:'Non-Subscription', data:buckets.map(b=>b.nonSubRevenue), backgroundColor:'rgba(0,113,227,0.75)', borderColor:'#0071e3', borderWidth:1, stack:'rev' },
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend:{ display:true, labels:{boxWidth:12,font:{size:11}} },
+        tooltip:{ callbacks:{ label:c=>c.dataset.label+': '+_currency+c.parsed.y.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) } },
+      },
+      scales:{
+        x:{ stacked:true, grid:{display:false} },
+        y:{ stacked:true, beginAtZero:true, ticks:{callback:v=>_currency+v.toLocaleString()} },
+      },
+    },
+  });
+  if (_subTrendChart) _subTrendChart.destroy();
+  _subTrendChart = new Chart(document.getElementById('r-sub-trend-chart').getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { label:'New Subscribers',  data:buckets.map(b=>b.firstCount), borderColor:'#5856d6', backgroundColor:'rgba(88,86,214,0.1)', fill:true, tension:0.3, pointRadius:3, pointHoverRadius:5 },
+      { label:'Recurring Orders', data:buckets.map(b=>b.recurCount), borderColor:'#34c759', backgroundColor:'rgba(52,199,89,0.1)',  fill:true, tension:0.3, pointRadius:3, pointHoverRadius:5 },
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend:{ display:true, labels:{boxWidth:12,font:{size:11}} },
+        tooltip:{ callbacks:{ label:c=>c.dataset.label+': '+c.parsed.y } },
+      },
+      scales:{
+        x:{ grid:{display:false} },
+        y:{ beginAtZero:true, ticks:{precision:0} },
+      },
+    },
+  });
+}
+
+function setSubGran(g, btn) {
+  _subGran = g;
+  document.querySelectorAll('#r-sub-gran-group .btn-seg').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderSubCharts();
+}
+
+renderChart();
+if (_data.hasSubscriptions) renderSubCharts();
+<\/script>
+</body>
+</html>`;
+}
+
+// ── Export HTML ────────────────────────────────────────────────────────────────
+$('o-html-btn').addEventListener('click',()=>{
+  if(!oData)return;
+  triggerDownload(buildReportHTML(false), `order_trends_report_${today()}.html`, 'text/html');
+});
+
+// ── Export PDF (open in new window → print dialog) ────────────────────────────
+$('o-pdf-btn').addEventListener('click',()=>{
+  if(!oData)return;
+  const html = buildReportHTML(true);
+  const win  = window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+});
+
+</script>
+</body>
+</html>

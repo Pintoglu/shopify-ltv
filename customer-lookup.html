@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Customer LTV Lookup</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f5f5f7;
+    color: #1d1d1f;
+    min-height: 100vh;
+  }
+
+  header {
+    background: #fff;
+    border-bottom: 1px solid #d2d2d7;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header span { font-size: 13px; color: #6e6e73; margin-left: auto; }
+
+  .main { padding: 32px; max-width: 1400px; margin: 0 auto; }
+
+  .upload-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 28px;
+  }
+
+  .upload-card {
+    background: #fff;
+    border: 2px dashed #d2d2d7;
+    border-radius: 12px;
+    padding: 28px;
+    transition: border-color 0.15s, background 0.15s;
+    cursor: pointer;
+  }
+  .upload-card:hover, .upload-card.drag-over {
+    border-color: #0071e3;
+    background: #f0f7ff;
+  }
+  .upload-card.has-files {
+    border-style: solid;
+    border-color: #34c759;
+    background: #f0fdf4;
+  }
+
+  .upload-card label {
+    display: block;
+    cursor: pointer;
+  }
+  .upload-card input[type="file"] { display: none; }
+
+  .upload-icon { font-size: 32px; margin-bottom: 10px; }
+  .upload-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .upload-sub { font-size: 13px; color: #6e6e73; margin-bottom: 14px; }
+
+  .file-list { list-style: none; }
+  .file-list li {
+    font-size: 13px;
+    padding: 4px 8px;
+    background: #fff;
+    border-radius: 6px;
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #d2d2d7;
+  }
+  .file-list li .remove-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #ff3b30;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 2px;
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .btn {
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.15s;
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: #0071e3; color: #fff; }
+  .btn-primary:not(:disabled):hover { background: #0077ed; }
+  .btn-export { background: #34c759; color: #fff; }
+  .btn-export:not(:disabled):hover { background: #30b950; }
+  .btn-clear { background: #f5f5f7; color: #1d1d1f; border: 1px solid #d2d2d7; }
+  .btn-clear:hover { background: #e5e5ea; }
+
+  .status {
+    font-size: 13px;
+    color: #6e6e73;
+    padding: 8px 14px;
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #d2d2d7;
+  }
+  .status.running { color: #ff9f0a; }
+  .status.done { color: #34c759; }
+  .status.error { color: #ff3b30; }
+
+  .results-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .results-header h2 { font-size: 17px; font-weight: 600; }
+  .badge {
+    font-size: 12px;
+    background: #0071e3;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 20px;
+  }
+  .badge.warn { background: #ff9f0a; }
+
+  .filter-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .filter-row input {
+    flex: 1;
+    min-width: 200px;
+    padding: 8px 12px;
+    border: 1px solid #d2d2d7;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .filter-row select {
+    padding: 8px 12px;
+    border: 1px solid #d2d2d7;
+    border-radius: 8px;
+    font-size: 13px;
+    background: #fff;
+  }
+
+  .table-wrap {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #d2d2d7;
+    overflow: auto;
+    max-height: 60vh;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead {
+    position: sticky;
+    top: 0;
+    background: #f5f5f7;
+    z-index: 1;
+  }
+  th {
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 1px solid #d2d2d7;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+  }
+  th:hover { color: #0071e3; }
+  th .sort-icon { font-size: 10px; margin-left: 4px; color: #6e6e73; }
+
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f9f9fb; }
+
+  .match-full { }
+  .match-none td:first-child { color: #ff3b30; font-style: italic; }
+
+  .tag-cell { max-width: 200px; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6e6e73;
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 15px; }
+
+  .summary-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .stat {
+    background: #fff;
+    border: 1px solid #d2d2d7;
+    border-radius: 10px;
+    padding: 14px 20px;
+    min-width: 140px;
+  }
+  .stat-val { font-size: 24px; font-weight: 700; }
+  .stat-label { font-size: 12px; color: #6e6e73; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Customer LTV Lookup</h1>
+  </div>
+  <span id="run-time"></span>
+</header>
+
+<div class="main">
+
+  <!-- Upload Zone -->
+  <div class="upload-grid">
+
+    <!-- Email list -->
+    <div class="upload-card" id="email-card">
+      <label>
+        <input type="file" id="email-file-input" accept=".csv">
+        <div class="upload-icon">📧</div>
+        <div class="upload-title">Email List CSV</div>
+        <div class="upload-sub">CSV with a "Customer email" column (and optionally a sales column)</div>
+        <ul class="file-list" id="email-file-list"></ul>
+      </label>
+    </div>
+
+    <!-- Customer exports -->
+    <div class="upload-card" id="export-card">
+      <label>
+        <input type="file" id="export-file-input" accept=".csv" multiple>
+        <div class="upload-icon">📂</div>
+        <div class="upload-title">Customer Export CSVs</div>
+        <div class="upload-sub">One or more Shopify customer export files</div>
+        <ul class="file-list" id="export-file-list"></ul>
+      </label>
+    </div>
+
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button class="btn btn-primary" id="run-btn" disabled>Run Lookup</button>
+    <button class="btn btn-export" id="export-btn" disabled>Export CSV</button>
+    <button class="btn btn-clear" id="clear-btn">Clear All</button>
+    <div class="status" id="status-box">Upload files above to begin</div>
+  </div>
+
+  <!-- Results -->
+  <div id="results-section" style="display:none">
+    <div class="summary-bar" id="summary-bar"></div>
+    <div class="results-header">
+      <h2>Results</h2>
+      <span class="badge" id="match-badge"></span>
+      <span class="badge warn" id="nomatch-badge" style="display:none"></span>
+    </div>
+    <div class="filter-row">
+      <input type="text" id="search-input" placeholder="Search by name, email, tags...">
+      <select id="match-filter">
+        <option value="all">All rows</option>
+        <option value="matched">Matched only</option>
+        <option value="unmatched">Unmatched only</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table id="result-table">
+        <thead id="result-thead"></thead>
+        <tbody id="result-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="empty-state" class="empty-state" style="display:none">
+    <div class="icon">🔍</div>
+    <p>No matching customers found.</p>
+  </div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+let emailFile = null;
+let exportFiles = [];
+let allRows = [];       // full merged dataset
+let filteredRows = [];  // after search/filter
+let sortCol = null;
+let sortAsc = true;
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/);
+  if (!lines.length) return [];
+
+  const headers = parseCSVLine(lines[0]).map(h => h.trim().replace(/^'/, ''));
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const vals = parseCSVLine(line);
+    const obj = {};
+    headers.forEach((h, idx) => {
+      obj[h] = (vals[idx] || '').trim().replace(/^'/, '');
+    });
+    rows.push(obj);
+  }
+  return { headers, rows };
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i+1] === '"') { cur += '"'; i++; }
+      else { inQuotes = !inQuotes; }
+    } else if (ch === ',' && !inQuotes) {
+      result.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+function readFile(file) {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload = e => res(e.target.result);
+    reader.onerror = rej;
+    reader.readAsText(file);
+  });
+}
+
+function normalizeEmail(e) {
+  return (e || '').toLowerCase().trim();
+}
+
+function fmt(v) {
+  if (v === undefined || v === null || v === '') return '—';
+  return v;
+}
+
+function escapeCSV(v) {
+  if (v === undefined || v === null) return '';
+  const s = String(v);
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────────
+function setStatus(msg, type = '') {
+  const el = document.getElementById('status-box');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+function updateRunBtn() {
+  document.getElementById('run-btn').disabled = !(emailFile && exportFiles.length > 0);
+}
+
+function renderFileTag(name, listId, removeCallback) {
+  const li = document.createElement('li');
+  li.dataset.name = name;
+  li.innerHTML = `📄 ${name} <button class="remove-btn" title="Remove">×</button>`;
+  li.querySelector('.remove-btn').addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    removeCallback(name);
+    li.remove();
+  });
+  document.getElementById(listId).appendChild(li);
+}
+
+// ── File input handlers ────────────────────────────────────────────────────────
+document.getElementById('email-file-input').addEventListener('change', function() {
+  if (!this.files.length) return;
+  emailFile = this.files[0];
+  document.getElementById('email-file-list').innerHTML = '';
+  renderFileTag(emailFile.name, 'email-file-list', () => {
+    emailFile = null;
+    document.getElementById('email-card').classList.remove('has-files');
+    updateRunBtn();
+  });
+  document.getElementById('email-card').classList.add('has-files');
+  updateRunBtn();
+});
+
+document.getElementById('export-file-input').addEventListener('change', function() {
+  Array.from(this.files).forEach(f => {
+    if (exportFiles.find(e => e.name === f.name)) return;
+    exportFiles.push(f);
+    renderFileTag(f.name, 'export-file-list', name => {
+      exportFiles = exportFiles.filter(e => e.name !== name);
+      if (!exportFiles.length) document.getElementById('export-card').classList.remove('has-files');
+      updateRunBtn();
+    });
+  });
+  if (exportFiles.length) document.getElementById('export-card').classList.add('has-files');
+  updateRunBtn();
+});
+
+// Drag & drop support
+['email-card', 'export-card'].forEach(cardId => {
+  const card = document.getElementById(cardId);
+  card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drag-over'); });
+  card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+  card.addEventListener('drop', e => {
+    e.preventDefault(); card.classList.remove('drag-over');
+    const input = card.querySelector('input[type="file"]');
+    const dt = new DataTransfer();
+    Array.from(e.dataTransfer.files)
+      .filter(f => f.name.endsWith('.csv'))
+      .forEach(f => dt.items.add(f));
+    if (dt.files.length) {
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change'));
+    }
+  });
+});
+
+// ── Clear ──────────────────────────────────────────────────────────────────────
+document.getElementById('clear-btn').addEventListener('click', () => {
+  emailFile = null; exportFiles = []; allRows = []; filteredRows = [];
+  document.getElementById('email-file-list').innerHTML = '';
+  document.getElementById('export-file-list').innerHTML = '';
+  document.getElementById('email-file-input').value = '';
+  document.getElementById('export-file-input').value = '';
+  document.getElementById('email-card').classList.remove('has-files');
+  document.getElementById('export-card').classList.remove('has-files');
+  document.getElementById('results-section').style.display = 'none';
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('export-btn').disabled = true;
+  document.getElementById('run-time').textContent = '';
+  setStatus('Upload files above to begin');
+  updateRunBtn();
+});
+
+// ── Run Lookup ─────────────────────────────────────────────────────────────────
+document.getElementById('run-btn').addEventListener('click', async () => {
+  const t0 = performance.now();
+  setStatus('Reading files…', 'running');
+  document.getElementById('run-btn').disabled = true;
+
+  try {
+    // Parse email list
+    const emailText = await readFile(emailFile);
+    const emailData = parseCSV(emailText);
+
+    // Detect email column
+    const emailCol = emailData.headers.find(h =>
+      /email/i.test(h) && !/accepts/i.test(h)
+    ) || emailData.headers[0];
+
+    // Detect sales column (optional)
+    const salesCol = emailData.headers.find(h =>
+      /sales|revenue|spend|total/i.test(h) && !/email/i.test(h)
+    );
+
+    // Build email→sales map
+    const emailMap = new Map();
+    emailData.rows.forEach(r => {
+      const email = normalizeEmail(r[emailCol]);
+      if (email) emailMap.set(email, salesCol ? r[salesCol] : null);
+    });
+
+    setStatus(`Loaded ${emailMap.size} emails. Reading customer exports…`, 'running');
+
+    // Parse all customer exports — deduplicate by email
+    const customerMap = new Map();
+    for (const file of exportFiles) {
+      const text = await readFile(file);
+      const data = parseCSV(text);
+      const custEmailCol = data.headers.find(h =>
+        /^email$/i.test(h) || (/email/i.test(h) && !/accepts/i.test(h))
+      ) || 'Email';
+
+      data.rows.forEach(r => {
+        const email = normalizeEmail(r[custEmailCol]);
+        if (email && !customerMap.has(email)) {
+          customerMap.set(email, { ...r, _source: file.name });
+        }
+      });
+    }
+
+    setStatus('Merging data…', 'running');
+
+    // Merge
+    const CUSTOMER_COLS = [
+      'Customer ID','First Name','Last Name','Email',
+      'Accepts Email Marketing','Phone','Accepts SMS Marketing',
+      'Default Address Company','Default Address Address1','Default Address Address2',
+      'Default Address City','Default Address Province Code',
+      'Default Address Country Code','Default Address Zip',
+      'Default Address Phone',
+      'Total Spent','Total Orders','Note','Tax Exempt','Tags'
+    ];
+
+    allRows = [];
+    emailMap.forEach((salesVal, email) => {
+      const cust = customerMap.get(email) || {};
+      const matched = customerMap.has(email);
+      const row = { _email: email, _sales: salesVal, _matched: matched };
+      CUSTOMER_COLS.forEach(col => {
+        row[col] = cust[col] !== undefined ? cust[col] : '';
+      });
+      if (!matched) row['Email'] = email;
+      row['_source'] = cust._source || '';
+      allRows.push(row);
+    });
+
+    // Sort by matched first, then by Total Spent desc
+    allRows.sort((a, b) => {
+      if (a._matched !== b._matched) return a._matched ? -1 : 1;
+      const sa = parseFloat(a['Total Spent']) || 0;
+      const sb = parseFloat(b['Total Spent']) || 0;
+      return sb - sa;
+    });
+
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+    document.getElementById('run-time').textContent = `Processed in ${elapsed}s`;
+
+    renderResults();
+
+    const matched = allRows.filter(r => r._matched).length;
+    setStatus(`Done — ${matched} matched, ${allRows.length - matched} not found in exports`, 'done');
+    document.getElementById('export-btn').disabled = false;
+
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'error');
+    console.error(err);
+  }
+
+  document.getElementById('run-btn').disabled = false;
+});
+
+// ── Render ─────────────────────────────────────────────────────────────────────
+const DISPLAY_COLS = [
+  { key: 'Email',                     label: 'Email' },
+  { key: '_sales',                    label: 'Sales (Email List)' },
+  { key: 'First Name',                label: 'First Name' },
+  { key: 'Last Name',                 label: 'Last Name' },
+  { key: 'Total Spent',               label: 'Total Spent' },
+  { key: 'Total Orders',              label: 'Total Orders' },
+  { key: 'Accepts Email Marketing',   label: 'Email Mktg' },
+  { key: 'Accepts SMS Marketing',     label: 'SMS Mktg' },
+  { key: 'Phone',                     label: 'Phone' },
+  { key: 'Default Address City',      label: 'City' },
+  { key: 'Default Address Province Code', label: 'State' },
+  { key: 'Default Address Country Code', label: 'Country' },
+  { key: 'Default Address Zip',       label: 'ZIP' },
+  { key: 'Default Address Address1',  label: 'Address' },
+  { key: 'Tags',                      label: 'Tags' },
+  { key: 'Tax Exempt',                label: 'Tax Exempt' },
+  { key: 'Customer ID',               label: 'Customer ID' },
+  { key: '_source',                   label: 'Source File' },
+];
+
+function applyFilters() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const mf = document.getElementById('match-filter').value;
+
+  filteredRows = allRows.filter(r => {
+    if (mf === 'matched' && !r._matched) return false;
+    if (mf === 'unmatched' && r._matched) return false;
+    if (q) {
+      const hay = DISPLAY_COLS.map(c => String(r[c.key] || '')).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  // apply current sort
+  if (sortCol !== null) applySortToFiltered();
+  renderTable();
+}
+
+function applySortToFiltered() {
+  filteredRows.sort((a, b) => {
+    const av = String(a[sortCol] || '');
+    const bv = String(b[sortCol] || '');
+    const an = parseFloat(av); const bn = parseFloat(bv);
+    let cmp = (!isNaN(an) && !isNaN(bn)) ? an - bn : av.localeCompare(bv);
+    return sortAsc ? cmp : -cmp;
+  });
+}
+
+function renderResults() {
+  filteredRows = [...allRows];
+
+  // Summary
+  const matched = allRows.filter(r => r._matched).length;
+  const unmatched = allRows.length - matched;
+  const totalSales = allRows.reduce((s, r) => s + (parseFloat(r._sales) || 0), 0);
+  const matchedSales = allRows.filter(r => r._matched).reduce((s, r) => s + (parseFloat(r._sales) || 0), 0);
+
+  document.getElementById('summary-bar').innerHTML = `
+    <div class="stat"><div class="stat-val">${allRows.length.toLocaleString()}</div><div class="stat-label">Emails in list</div></div>
+    <div class="stat"><div class="stat-val" style="color:#34c759">${matched.toLocaleString()}</div><div class="stat-label">Matched in exports</div></div>
+    <div class="stat"><div class="stat-val" style="color:#ff3b30">${unmatched.toLocaleString()}</div><div class="stat-label">Not found</div></div>
+    <div class="stat"><div class="stat-val">$${totalSales.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div><div class="stat-label">Total sales (list)</div></div>
+    <div class="stat"><div class="stat-val">$${matchedSales.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div><div class="stat-label">Sales from matched</div></div>
+  `;
+
+  document.getElementById('match-badge').textContent = `${matched} matched`;
+  const nb = document.getElementById('nomatch-badge');
+  if (unmatched > 0) {
+    nb.style.display = '';
+    nb.textContent = `${unmatched} unmatched`;
+  } else {
+    nb.style.display = 'none';
+  }
+
+  // Header
+  const thead = document.getElementById('result-thead');
+  thead.innerHTML = '<tr>' + DISPLAY_COLS.map((c, i) =>
+    `<th data-idx="${i}">${c.label} <span class="sort-icon">⇅</span></th>`
+  ).join('') + '</tr>';
+
+  thead.querySelectorAll('th').forEach(th => {
+    th.addEventListener('click', () => {
+      const idx = parseInt(th.dataset.idx);
+      const key = DISPLAY_COLS[idx].key;
+      if (sortCol === key) sortAsc = !sortAsc;
+      else { sortCol = key; sortAsc = true; }
+      applySortToFiltered();
+      renderTable();
+    });
+  });
+
+  document.getElementById('results-section').style.display = '';
+  renderTable();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('result-tbody');
+
+  if (!filteredRows.length) {
+    tbody.innerHTML = '<tr><td colspan="' + DISPLAY_COLS.length + '" style="text-align:center;padding:40px;color:#6e6e73">No results</td></tr>';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  filteredRows.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.className = r._matched ? 'match-full' : 'match-none';
+    tr.innerHTML = DISPLAY_COLS.map(c => {
+      let v = fmt(r[c.key]);
+      if (c.key === '_matched') v = r._matched ? '✓' : '✗';
+      if ((c.key === 'Total Spent' || c.key === '_sales') && v !== '—') {
+        v = '$' + parseFloat(v).toLocaleString(undefined, {minimumFractionDigits:2,maximumFractionDigits:2});
+      }
+      const cls = c.key === 'Tags' ? ' class="tag-cell"' : '';
+      return `<td${cls} title="${String(r[c.key] || '').replace(/"/g,'&quot;')}">${v}</td>`;
+    }).join('');
+    fragment.appendChild(tr);
+  });
+
+  tbody.innerHTML = '';
+  tbody.appendChild(fragment);
+}
+
+// ── Search / filter listeners ──────────────────────────────────────────────────
+document.getElementById('search-input').addEventListener('input', applyFilters);
+document.getElementById('match-filter').addEventListener('change', applyFilters);
+
+// ── Export ─────────────────────────────────────────────────────────────────────
+document.getElementById('export-btn').addEventListener('click', () => {
+  const exportCols = [
+    { key: 'Email',                     label: 'Email' },
+    { key: '_sales',                    label: 'Sales (Email List)' },
+    { key: 'First Name',                label: 'First Name' },
+    { key: 'Last Name',                 label: 'Last Name' },
+    { key: 'Total Spent',               label: 'Total Spent' },
+    { key: 'Total Orders',              label: 'Total Orders' },
+    { key: 'Accepts Email Marketing',   label: 'Accepts Email Marketing' },
+    { key: 'Accepts SMS Marketing',     label: 'Accepts SMS Marketing' },
+    { key: 'Phone',                     label: 'Phone' },
+    { key: 'Default Address Address1',  label: 'Address' },
+    { key: 'Default Address Address2',  label: 'Address 2' },
+    { key: 'Default Address City',      label: 'City' },
+    { key: 'Default Address Province Code', label: 'State' },
+    { key: 'Default Address Country Code', label: 'Country' },
+    { key: 'Default Address Zip',       label: 'ZIP' },
+    { key: 'Default Address Company',   label: 'Company' },
+    { key: 'Tags',                      label: 'Tags' },
+    { key: 'Tax Exempt',                label: 'Tax Exempt' },
+    { key: 'Note',                      label: 'Note' },
+    { key: 'Customer ID',               label: 'Customer ID' },
+    { key: '_source',                   label: 'Source File' },
+    { key: '_matched',                  label: 'Matched' },
+  ];
+
+  const rows = [exportCols.map(c => c.label).join(',')];
+  filteredRows.forEach(r => {
+    rows.push(exportCols.map(c => {
+      let v = r[c.key];
+      if (c.key === '_matched') v = r._matched ? 'Yes' : 'No';
+      return escapeCSV(v === undefined ? '' : v);
+    }).join(','));
+  });
+
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `customer_lookup_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
