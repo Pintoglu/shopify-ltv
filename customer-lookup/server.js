@@ -96,6 +96,20 @@ function detectSalesCol(headers) {
   );
 }
 
+// ── Streaming helper ───────────────────────────────────────────────────────────
+
+function makeStreamer(res) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  return {
+    progress: (message) => send({ type: 'progress', message }),
+    result:   (data)    => { send({ type: 'result', ...data }); res.end(); },
+    error:    (message) => { send({ type: 'error', error: message }); res.end(); },
+  };
+}
+
 // ── POST /api/lookup ───────────────────────────────────────────────────────────
 
 app.post(
@@ -103,39 +117,40 @@ app.post(
   upload.any(),
   (req, res) => {
     const uploadedPaths = [];
+    const stream = makeStreamer(res);
     try {
       const filesByField = groupFilesByField(req.files);
       const emailFileInfo = filesByField['emailFile']?.[0];
       const exportFileInfos = filesByField['exportFiles'] || [];
 
-      if (!emailFileInfo) return res.status(400).json({ error: 'No email list file uploaded.' });
-      if (!exportFileInfos.length) return res.status(400).json({ error: 'No customer export files uploaded.' });
+      if (!emailFileInfo) return stream.error('No email list file uploaded.');
+      if (!exportFileInfos.length) return stream.error('No customer export files uploaded.');
 
+      stream.progress('Parsing email list…');
       const expandedExports = expandFiles(exportFileInfos);
       uploadedPaths.push(emailFileInfo.path, ...exportFileInfos.map(f => f.path), ...expandedExports.filter(f => f._temp).map(f => f.path));
 
-      // --- Parse email list ---
       const emailRows = readCSV(emailFileInfo.path);
-      if (!emailRows.length) return res.status(400).json({ error: 'Email list CSV is empty.' });
+      if (!emailRows.length) return stream.error('Email list CSV is empty.');
 
       const emailHeaders = Object.keys(emailRows[0]);
       const emailCol = detectEmailCol(emailHeaders);
       const salesCol = detectSalesCol(emailHeaders.filter(h => h !== emailCol));
 
-      const emailMap = new Map(); // email → { sales, ...otherEmailListCols }
+      const emailMap = new Map();
       emailRows.forEach(r => {
         const email = normalizeEmail(r[emailCol]);
         if (!email) return;
         const entry = { _sales: salesCol ? (r[salesCol] || '') : '' };
-        // carry any extra columns from the email list
         emailHeaders.forEach(h => {
           if (h !== emailCol && h !== salesCol) entry[`_list_${h}`] = r[h] || '';
         });
         emailMap.set(email, entry);
       });
 
-      // --- Parse customer exports, deduplicate by email ---
-      const customerMap = new Map(); // email → customer record
+      stream.progress(`Parsed ${emailMap.size.toLocaleString()} emails — scanning export files…`);
+
+      const customerMap = new Map();
       expandedExports.forEach(({ originalname, path: filePath }) => {
         const rows = readCSV(filePath);
         if (!rows.length) return;
@@ -148,7 +163,8 @@ app.post(
         });
       });
 
-      // --- Merge ---
+      stream.progress(`Parsed ${customerMap.size.toLocaleString()} customer records — matching…`);
+
       const CUSTOMER_COLS = [
         'Customer ID', 'First Name', 'Last Name', 'Email',
         'Accepts Email Marketing', 'Phone', 'Accepts SMS Marketing',
@@ -163,13 +179,7 @@ app.post(
       emailMap.forEach((listData, email) => {
         const cust = customerMap.get(email) || {};
         const matched = customerMap.has(email);
-        const row = {
-          email,
-          matched,
-          sales: listData._sales,
-          source: cust._source || '',
-        };
-        // extra email-list cols
+        const row = { email, matched, sales: listData._sales, source: cust._source || '' };
         Object.entries(listData).forEach(([k, v]) => {
           if (k !== '_sales') row[k.replace(/^_list_/, '')] = v;
         });
@@ -179,26 +189,18 @@ app.post(
         results.push(row);
       });
 
-      // sort: matched first, then by Total Spent desc
       results.sort((a, b) => {
         if (a.matched !== b.matched) return a.matched ? -1 : 1;
         return (parseFloat(b['Total Spent']) || 0) - (parseFloat(a['Total Spent']) || 0);
       });
 
       const matchedCount = results.filter(r => r.matched).length;
-
-      res.json({
-        total: results.length,
-        matched: matchedCount,
-        unmatched: results.length - matchedCount,
-        results,
-      });
+      stream.result({ total: results.length, matched: matchedCount, unmatched: results.length - matchedCount, results });
 
     } catch (err) {
       console.error(err);
-      res.status(500).json({ error: err.message });
+      stream.error(err.message);
     } finally {
-      // clean up uploaded files
       uploadedPaths.forEach(p => { try { fs.unlinkSync(p); } catch (_) {} });
     }
   }
@@ -211,25 +213,26 @@ app.post(
   upload.any(),
   (req, res) => {
     const uploadedPaths = [];
+    const stream = makeStreamer(res);
     try {
       const filesByField = groupFilesByField(req.files);
       const emailFileInfo = filesByField['emailFile']?.[0];
       const orderFileInfos = filesByField['orderFiles'] || [];
 
-      if (!emailFileInfo) return res.status(400).json({ error: 'No email list file uploaded.' });
-      if (!orderFileInfos.length) return res.status(400).json({ error: 'No order files uploaded.' });
+      if (!emailFileInfo) return stream.error('No email list file uploaded.');
+      if (!orderFileInfos.length) return stream.error('No order files uploaded.');
 
+      stream.progress('Parsing email list…');
       const expandedOrders = expandFiles(orderFileInfos);
       uploadedPaths.push(emailFileInfo.path, ...orderFileInfos.map(f => f.path), ...expandedOrders.filter(f => f._temp).map(f => f.path));
 
-      // Build email set from list
       const emailRows = readCSV(emailFileInfo.path);
       const emailHeaders = Object.keys(emailRows[0] || {});
       const emailCol = detectEmailCol(emailHeaders);
       const emailSet = new Set(emailRows.map(r => normalizeEmail(r[emailCol])).filter(Boolean));
 
-      // Parse all order files — deduplicate orders by Name, keep first row with a Total
-      const orderMap = new Map(); // orderId → order record
+      stream.progress(`Loaded ${emailSet.size.toLocaleString()} target emails — scanning order files…`);
+      const orderMap = new Map();
       expandedOrders.forEach(({ originalname, path: filePath }) => {
         const rows = readCSV(filePath);
         rows.forEach(r => {
@@ -259,6 +262,8 @@ app.post(
       });
 
       const orders = Array.from(orderMap.values());
+
+      stream.progress(`Parsed ${orders.length.toLocaleString()} orders — computing stats…`);
 
       // Emails in the list that have zero orders in the exports
       const emailsWithOrders = new Set(orders.map(o => o.email));
@@ -356,7 +361,7 @@ app.post(
         subByMonth:          toSubBuckets('month'),
       };
 
-      res.json({
+      stream.result({
         totalOrders: validOrders.length,
         totalRevenue,
         uniqueCustomers: new Set(validOrders.map(o => o.email)).size,
@@ -372,7 +377,7 @@ app.post(
 
     } catch (err) {
       console.error(err);
-      res.status(500).json({ error: err.message });
+      stream.error(err.message);
     } finally {
       uploadedPaths.forEach(p => { try { fs.unlinkSync(p); } catch (_) {} });
     }

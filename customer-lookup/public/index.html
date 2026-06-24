@@ -482,6 +482,28 @@ const $ = id => document.getElementById(id);
 function setStatus(id, msg, type='') { $(id).textContent=msg; $(id).className='status '+type; }
 function setProgress(w, b, pct) { $(w).style.display=pct>=0?'':'none'; $(b).style.width=Math.max(0,pct)+'%'; }
 
+async function streamFetch(url, formData, onProgress) {
+  const res = await fetch(url, { method: 'POST', body: formData });
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop();
+    for (const part of parts) {
+      if (!part.startsWith('data: ')) continue;
+      const msg = JSON.parse(part.slice(6));
+      if (msg.type === 'progress') onProgress(msg.message);
+      else if (msg.type === 'error') throw new Error(msg.error);
+      else if (msg.type === 'result') return msg;
+    }
+  }
+  throw new Error('Stream ended without result');
+}
+
 function addFileTag(name, listId, onRemove) {
   const li = document.createElement('li');
   li.dataset.name = name;
@@ -606,10 +628,7 @@ $('run-btn').addEventListener('click', async()=>{
     fd.append('emailFile',emailFile);
     exportFiles.forEach(f=>fd.append('exportFiles',f));
     setProgress('progress-wrap','progress-bar',40);
-    const res=await fetch('/api/lookup',{method:'POST',body:fd});
-    setProgress('progress-wrap','progress-bar',80);
-    const data=await res.json();
-    if(!res.ok) throw new Error(data.error||'Server error');
+    const data=await streamFetch('/api/lookup',fd,(msg)=>setStatus('status-box',msg,'running'));
     allRows=data.results;
     setProgress('progress-wrap','progress-bar',100);
     setTimeout(()=>setProgress('progress-wrap','progress-bar',-1),800);
@@ -759,10 +778,7 @@ $('o-run-btn').addEventListener('click', async()=>{
     fd.append('emailFile',oEmailFile);
     oOrderFiles.forEach(f=>fd.append('orderFiles',f));
     setProgress('o-progress-wrap','o-progress-bar',40);
-    const res=await fetch('/api/orders',{method:'POST',body:fd});
-    setProgress('o-progress-wrap','o-progress-bar',80);
-    oData=await res.json();
-    if(!res.ok) throw new Error(oData.error||'Server error');
+    oData=await streamFetch('/api/orders',fd,(msg)=>setStatus('o-status-box',msg,'running'));
     setProgress('o-progress-wrap','o-progress-bar',100);
     setTimeout(()=>setProgress('o-progress-wrap','o-progress-bar',-1),800);
     renderOrderResults();
