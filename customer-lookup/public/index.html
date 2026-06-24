@@ -1172,7 +1172,21 @@ function buildReportHTML(forPrint=false) {
     hasSubscriptions: oData.hasSubscriptions || false,
   });
 
-  const printScript = forPrint ? '<script>window.onload=()=>{ setTimeout(()=>window.print(),400); }<\/script>' : '';
+  const printScript = forPrint ? `<script>
+window.onload=()=>{
+  // Give Chart.js one paint cycle to finish drawing, then snapshot canvases → images
+  // so they print at the correct size regardless of screen vs print dimensions.
+  requestAnimationFrame(()=>{
+    document.querySelectorAll('.chart-wrap canvas').forEach(canvas=>{
+      const img=document.createElement('img');
+      img.src=canvas.toDataURL('image/png');
+      img.style.cssText='width:100%;height:100%;display:block;';
+      canvas.replaceWith(img);
+    });
+    window.print();
+  });
+};
+<\/script>` : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -1220,16 +1234,17 @@ ${printScript}
     body{background:#fff!important;padding:0;}
     .report-header{border:1px solid #d2d2d7;box-shadow:none;margin-bottom:12px;padding:12px 16px;}
     .report-header h1{font-size:16px;}
-    .summary-bar{gap:6px;margin-bottom:12px;flex-wrap:nowrap;}
-    .stat{padding:7px 9px;min-width:0;flex:1;border-radius:7px;}
+    .summary-bar{gap:5px;margin-bottom:12px;flex-wrap:wrap;}
+    .stat{padding:7px 9px;min-width:80px;flex:1;border-radius:7px;}
     .stat-val{font-size:13px;}
     .stat-label{font-size:8.5px;}
     .stat > div[style]{font-size:9px!important;}
     .chart-controls{display:none!important;}
     .sub-section-header .seg-group{display:none!important;}
-    .sub-charts-grid{grid-template-columns:1fr 1fr;}
+    .sub-charts-grid{grid-template-columns:1fr 1fr;page-break-inside:avoid;}
+    .sub-charts-grid .chart-card{height:240px;margin-bottom:0;padding:10px 12px;}
     .chart-card{padding:12px 14px;margin-bottom:12px;page-break-inside:avoid;}
-    .chart-wrap{height:200px;}
+    .chart-wrap{height:190px;overflow:hidden;}
     .table-section{border:1px solid #d2d2d7;}
     .table-title{padding:10px 12px 8px;font-size:13px;}
     th{padding:6px 9px;font-size:10.5px;background:#f5f5f7!important;}
@@ -1428,6 +1443,7 @@ function setSubGran(g, btn) {
   renderSubCharts();
 }
 
+Chart.defaults.animation = false;
 renderChart();
 if (_data.hasSubscriptions) renderSubCharts();
 <\/script>
