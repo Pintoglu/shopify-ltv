@@ -1174,13 +1174,16 @@ function buildReportHTML(forPrint=false) {
 
   const printScript = forPrint ? `<script>
 window.onload=()=>{
-  // Give Chart.js one paint cycle to finish drawing, then snapshot canvases → images
-  // so they print at the correct size regardless of screen vs print dimensions.
   requestAnimationFrame(()=>{
-    document.querySelectorAll('.chart-wrap canvas').forEach(canvas=>{
+    // Snapshot each canvas as a fixed-height image so print layout doesn't collapse or overlap.
+    document.querySelectorAll('.chart-wrap').forEach(wrap=>{
+      const canvas=wrap.querySelector('canvas');
+      if(!canvas)return;
       const img=document.createElement('img');
       img.src=canvas.toDataURL('image/png');
-      img.style.cssText='width:100%;height:100%;display:block;';
+      img.style.cssText='width:100%;height:190px;display:block;object-fit:fill;';
+      wrap.style.height='190px';
+      wrap.style.overflow='hidden';
       canvas.replaceWith(img);
     });
     window.print();
